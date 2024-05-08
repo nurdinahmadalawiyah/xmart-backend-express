@@ -5,7 +5,15 @@ import {connectDBPostgre} from "../config/db.js";
 const resolvers = {
     getTransaksi: async ({ qrCode }) => {
         try {
-            const transaksiDocuments = await Transaksi.find({qrcode: qrCode});
+            let transaksiDocuments;
+
+            const redisData = await redisClient.get(qrCode);
+            if (redisData) {
+                transaksiDocuments = JSON.parse(redisData);
+            } else {
+                transaksiDocuments = await Transaksi.find({ qrcode: qrCode });
+                await redisClient.setEx(qrCode, 3600, JSON.stringify(transaksiDocuments));
+            }
 
             return transaksiDocuments.map(doc => ({
                 qrcode: doc.qrcode,
@@ -15,16 +23,12 @@ const resolvers = {
                 tanggalJam: doc.tanggal_jam
             }));
         } catch (error) {
-            throw new Error('Failed to fetch transactions')
+            console.error('Failed to fetch transactions:', error);
+            throw new Error('Failed to fetch transactions');
         }
     },
     saveTransaksi: async ({qrcode, transaksi}) => {
         try {
-            // Check-in barang ke Redis
-            await Promise.all(transaksi.map(async (barang) => {
-                await redisClient.setEx(barang.rfid, 3600, JSON.stringify(barang));
-            }));
-
             // Simpan transaksi ke MongoDB
             const transaksiDocuments = transaksi.map((barang) => ({
                 qrcode,
@@ -34,6 +38,9 @@ const resolvers = {
                 tanggal_jam: new Date()
             }));
             await Transaksi.insertMany(transaksiDocuments);
+
+            // Check-in barang ke Redis
+            await redisClient.setEx(qrcode, 3600, JSON.stringify(transaksiDocuments));
 
             // Transfer data transaksi dari MongoDB ke PostgreSQL menggunakan sequelize
             const client = await connectDBPostgre(); // Gunakan connectDBPostgre() untuk mendapatkan klien PostgreSQL
@@ -52,10 +59,8 @@ const resolvers = {
             return {success: true, message: "Transaksi berhasil diselesaikan"};
         } catch (error) {
             console.error(error)
-            await Promise.all(transaksi.map(async (barang) => {
-                await redisClient.del(barang.rfid);
-            }));
             await Transaksi.deleteMany({qrcode});
+            await redisClient.del(qrcode);
             return {success: false, message: "Gagal menyelesaikan transaksi"};
         }
     }
