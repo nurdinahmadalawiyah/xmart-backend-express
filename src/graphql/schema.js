@@ -24,8 +24,7 @@ const schema = buildSchema(`
     }
     
     type Query {
-        getTransaksi: [Transaksi]
-        getRiwayatTransaksi: [Transaksi]
+        getTransaksi(qrCode: String!): [Transaksi!]!
     }
     
     type Mutation {

@@ -3,9 +3,9 @@ import Transaksi from "../models/transaksi.js";
 import {connectDBPostgre} from "../config/db.js";
 
 const resolvers = {
-    getTransaksi: async () => {
+    getTransaksi: async ({ qrCode }) => {
         try {
-            const transaksiDocuments = await Transaksi.find();
+            const transaksiDocuments = await Transaksi.find({qrcode: qrCode});
 
             return transaksiDocuments.map(doc => ({
                 qrcode: doc.qrcode,
