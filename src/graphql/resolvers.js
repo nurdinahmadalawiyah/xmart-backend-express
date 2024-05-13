@@ -44,7 +44,7 @@ const resolvers = {
 
             // Periksa apakah saldo mencukupi
             if (!user || user.wallet < totalHarga) {
-                return {success: false, message: `Not enough balance your balance is ${user.wallet} and you need ${totalHarga}`};
+                throw new Error(`Not enough balance your balance is ${user.wallet} and you need ${totalHarga}`);
             }
 
             // Simpan transaksi ke MongoDB
@@ -81,7 +81,7 @@ const resolvers = {
             console.error(error)
             await Transaksi.deleteMany({qrcode});
             await redisClient.del(qrcode);
-            return {success: false, message: "Gagal menyelesaikan transaksi"};
+            throw new Error("Failed to complete transaction");
         }
     }
 }
