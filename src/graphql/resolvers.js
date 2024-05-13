@@ -57,9 +57,6 @@ const resolvers = {
             }));
             await Transaksi.insertMany(transaksiDocuments);
 
-            // Check-in barang ke Redis
-            await redisClient.setEx(qrcode, 3600, JSON.stringify(transaksiDocuments));
-
             // Transfer data transaksi dari MongoDB ke PostgreSQL menggunakan sequelize
             await client.query('BEGIN');
             for (const detail of transaksiDocuments) {
