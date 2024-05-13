@@ -29,6 +29,24 @@ const resolvers = {
     },
     saveTransaksi: async ({qrcode, transaksi}) => {
         try {
+            // Gunakan connectDBPostgre() untuk mendapatkan klien PostgreSQL
+            const client = await connectDBPostgre();
+
+            // Hitung total harga transaksi
+            let totalHarga = 0;
+            for (const barang of transaksi) {
+                totalHarga += barang.hargaSatuan * barang.jumlah;
+            }
+
+            // Dapatkan saldo wallet pengguna
+            const result = await client.query('SELECT wallet FROM customer WHERE qrcode = $1', [qrcode]);
+            const user = result.rows[0];
+
+            // Periksa apakah saldo mencukupi
+            if (!user || user.wallet < totalHarga) {
+                return {success: false, message: `Not enough balance your balance is ${user.wallet} and you need ${totalHarga}`};
+            }
+
             // Simpan transaksi ke MongoDB
             const transaksiDocuments = transaksi.map((barang) => ({
                 qrcode,
@@ -43,7 +61,6 @@ const resolvers = {
             await redisClient.setEx(qrcode, 3600, JSON.stringify(transaksiDocuments));
 
             // Transfer data transaksi dari MongoDB ke PostgreSQL menggunakan sequelize
-            const client = await connectDBPostgre(); // Gunakan connectDBPostgre() untuk mendapatkan klien PostgreSQL
             await client.query('BEGIN');
             for (const detail of transaksiDocuments) {
                 await client.query('INSERT INTO transaksi (qrcode, rfid, harga_satuan, jumlah, tanggal_jam) VALUES ($1, $2, $3, $4, $5)', [
@@ -55,6 +72,9 @@ const resolvers = {
                 ]);
             }
             await client.query('COMMIT');
+
+            // Mengurangi saldo wallet pengguna
+            await client.query('UPDATE customer SET wallet = wallet - $1 WHERE qrcode = $2', [totalHarga, qrcode]);
 
             return {success: true, message: "Transaksi berhasil diselesaikan"};
         } catch (error) {
